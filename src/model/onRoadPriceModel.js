@@ -35,4 +35,4 @@ const OnroadPriceSchema = new mongoose.Schema({
         trim:true
     }
 }, { timestamps: true })
-module.exports = mongoose.model('OnroadPrice', OnroadPriceSchema)
+module.exports = mongoose.model('OnroadPrice', OnroadPriceSchema) 

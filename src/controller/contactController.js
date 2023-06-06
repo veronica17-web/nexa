@@ -1,61 +1,98 @@
-const contactUsModel = require("../model/contactModel")
-const { isMobileNumber, isValid, isValidBody, isValidEmail } = require("../validation/validation")
+const contactUsModel = require("../model/contactModel");
+
+const moment = require("moment");
+require("moment-timezone");
 const contactForm = async (req, res) => {
-    try {
-        let data = req.body
-        let { name, email, phone, outlet, model, comment } = data
-        if (isValidBody(data)) return res.status(400).send({ status: false, message: "Enter the data to submit" });
-        if (!name) return res.status(400).send({ status: false, message: "name is required" });
+  try {
+    let data = req.body;
+    let { name, email, phone, outlet, model, comment } = data;
+    moment.tz.setDefault("Asia/Kolkata");
+    let dates = moment().format("DD-MM-YYYY");
+    let times = moment().format("HH:mm:ss");
+    data.date = dates;
+    data.time = times;
+    let saveDate = await contactUsModel.create(data);
+    res.status(201).send({ status: true, data: saveDate });
+  } catch (error) {
+    return res.status(500).send({ status: false, message: error.message });
+  }
+};
+//===============================================================================
+const duplicateContactUsForm = async (req, res) => {
+  try {
+    const repeatedPhoneNumbers = await contactUsModel.aggregate([
+      {
+        $group: {
+          _id: "$phone",
+          docs: { $push: "$$ROOT" },
+          count: { $sum: 1 },
+        },
+      },
+      { $match: { count: { $gt: 1 } } },
+      { $project: { count: 1, docs: 1, _id: 0, phoneNumber: "$_id" } },
+    ]);
 
-        if (!phone) return res.status(400).send({ status: false, message: "phone is required" });
-        if (!isMobileNumber(phone.trim())) return res.status(400).send({ status: false, message: "Please Enter a valid phone number" });
-
-        if (!email) return res.status(400).send({ status: false, message: "email is required" });
-        if (!isValidEmail(email.trim())) return res.status(400).send({ status: false, message: "Please Enter a valid Email-id" });
-
-        if (!outlet) return res.status(400).send({ status: false, message: "outlet is required" });
-        let outlets = ["Nexa Lumbini", "Nexa Kompally", "nexa Jubilee"]
-        if (!outlets.includes(outlet)) return res.status(400).send({ status: false, msg: `outlet must be slected among ${outlets}` });
-
-        if (model) {
-            let models = ["Fronx", "jimny", "grand vitara", "ciaz", "Baleno", "ignis", "xL6"]
-            if (!models.includes(model)) return res.status(400).send({ status: false, msg: `model must be slected among ${models}` });
-        }
-        if (comment) {
-            if (isValid(comment)) return res.status(400).send({ status: false, message: "comment should not be an empty string" });
-        }
-        var currentdate = new Date();
-        var ToDaysdate = currentdate.getDate() + "-" + (currentdate.getMonth()+1)
-            + "-" + currentdate.getFullYear()
-        let ToDaystime = + currentdate.getHours() + ":"
-            + currentdate.getMinutes() + ":" + currentdate.getSeconds();
-        data.date = ToDaysdate
-        data.time = ToDaystime 
-        let getdataCount = await contactUsModel.find().count()
-        data.sno = getdataCount + 1
-        let duplicateData = await contactUsModel.findOne({ phone: phone })//.select({phone:1},{date:1})
-        if (duplicateData) {
-            if (duplicateData.date !== ToDaysdate) {
-                let saveDate = await contactUsModel.create(data)
-              return  res.status(201).send({ status: true, data: saveDate })
-            }else{
-                return res.status(400).send({ status: true, msg:"already existing" })
-            }
-        }
-        let saveDate = await contactUsModel.create(data)
-        res.status(201).send({ status: true, data: saveDate })
-    } catch (error) {
-        return res.status(500).send({ status: false, message: error.message })
-    }
-}
+    return res.status(200).send({ status: true, data: repeatedPhoneNumbers });
+  } catch (error) {
+    return res.status(500).send({ status: false, message: error.message });
+  }
+};
+//======================================================================
 
 const getcontactForm = async (req, res) => {
-    try {
-        //let filter = { isDeleted: false }
-        let data = await contactUsModel.find()
-        res.status(200).send({ status: true, data: data })
-    } catch (error) {
-        return res.status(500).send({ status: false, message: error.message })
+  try {
+    const filter = req.query;
+    const sortOptions = {};
+    let data = [];
+
+    if (Object.keys(filter).length === 0) {
+      // No query parameters provided
+      sortOptions.createdAt = -1;
+      const data = await contactUsModel
+        .find({ isDeleted: false })
+        .sort(sortOptions);
+      return res.status(200).send({ status: true, data: data });
+    } else {
+      const filterDate = filter.date;
+      data = await contactUsModel.aggregate([
+        { $match: { isDeleted: false, date: filterDate } },
+        { $group: { _id: "$phone", doc: { $first: "$$ROOT" } } },
+        { $replaceRoot: { newRoot: "$doc" } },
+        { $sort: { createdAt: -1 } },
+      ]);
     }
-}
-module.exports = { contactForm, getcontactForm }
+    return res.status(200).send({ status: true, data: data });
+  } catch (error) {
+    return res.status(500).send({ status: false, message: error.message });
+  }
+};
+//=======================================================================================
+
+const sortContactUs = async (req, res) => {
+  try {
+    const filter = req.query;
+    const sortOptions = {};
+
+    if (Object.keys(filter).length === 0) {
+      // No query parameters provided, sort by createdAt in descending order
+      sortOptions.createdAt = -1;
+      const data = await contactUsModel
+        .find({ isDeleted: false })
+        .sort(sortOptions);
+      return res.status(200).send({ status: true, data: data });
+    } else {
+      // Sort by the provided filter parameters
+      const data = await contactUsModel.find({ isDeleted: false }).sort(filter);
+      return res.status(200).send({ status: true, data: data });
+    }
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
+module.exports = {
+  contactForm,
+  getcontactForm,
+  duplicateContactUsForm,
+  sortContactUs,
+};

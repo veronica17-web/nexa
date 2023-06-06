@@ -39,9 +39,13 @@ const contactUsSchema = new mongoose.Schema({
         type:String,
         trim:true
     },
-    sno:{
-        type:String,
-        trim:true
+    isDeleted:{
+        type:Boolean,
+        default:false
+    },
+    deletedAt: {
+        type: Date
     }
+    
 }, { timestamps: true })
 module.exports = mongoose.model('contact us', contactUsSchema)
